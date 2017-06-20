@@ -16,7 +16,8 @@ const
   crypto = require('crypto'),
   express = require('express'),
   https = require('https'),  
-  request = require('request');
+  request = require('request'),
+  fs = require('fs');
 
 var app = express();
 app.set('port', process.env.PORT || 5000);
@@ -50,6 +51,14 @@ const PAGE_ACCESS_TOKEN = (process.env.MESSENGER_PAGE_ACCESS_TOKEN) ?
 const SERVER_URL = (process.env.SERVER_URL) ?
   (process.env.SERVER_URL) :
   config.get('serverURL');
+
+const SSL_PRIV_KEY = (process.env.SSL_PRIV_KEY) ? 
+  process.env.SSL_PRIV_KEY :
+  config.get('sslPrivKey');
+
+  const SSL_CERT = (process.env.SSL_CERT) ? 
+  process.env.SSL_CERT :
+  config.get('sslCert');
 
 if (!(APP_SECRET && VALIDATION_TOKEN && PAGE_ACCESS_TOKEN && SERVER_URL)) {
   console.error("Missing config values");
@@ -307,11 +316,17 @@ function receivedMessage(event) {
         sendAccountLinking(senderID);
         break;
 
+      case 'location':
+        sendLocationQuickReply(senderID);
+        break;
+
       default:
-        sendTextMessage(senderID, messageText);
+        console.log(JSON.stringify(event));
+        sendTextMessage2(senderID, JSON.stringify(event));
     }
   } else if (messageAttachments) {
-    sendTextMessage(senderID, "Message with attachment received");
+    console.log(JSON.stringify(event));
+    sendTextMessage(senderID, JSON.stringify(message.attachments[0].payload.coordinates));
   }
 }
 
@@ -525,6 +540,39 @@ function sendTextMessage(recipientId, messageText) {
     },
     message: {
       text: messageText,
+      metadata: "DEVELOPER_DEFINED_METADATA"
+    }
+  };
+
+  callSendAPI(messageData);
+}
+
+function sendLocationQuickReply(recipientId) {
+  var messageData = {
+
+  recipient:{
+    id:recipientId
+  },
+  message:{
+    text:"Please share your location:",
+    quick_replies:[
+      {
+        "content_type":"location",
+      }
+    ]
+    }
+  };
+
+  callSendAPI(messageData);
+}
+
+function sendTextMessage2(recipientId, event) {
+  var messageData = {
+    recipient: {
+      id: recipientId
+    },
+    message: {
+      text: event,
       metadata: "DEVELOPER_DEFINED_METADATA"
     }
   };
@@ -835,4 +883,9 @@ app.listen(app.get('port'), function() {
 });
 
 module.exports = app;
+var options = {
+  key: fs.readFileSync(SSL_PRIV_KEY),
+  cert: fs.readFileSync(SSL_CERT)
+};
 
+https.createServer(options, app).listen(443);
